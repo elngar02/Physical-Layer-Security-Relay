@@ -28,10 +28,22 @@ The system consists of:
 - Demonstrates how jamming can improve secrecy against eavesdroppers
 - Compares performance with and without jamming
 
-### 3. Utility Functions
+### 3. Multi-Relay Selection (`relay_selection_simulation.m`)
+- Simulates systems with multiple available relays
+- Implements optimal relay selection based on instantaneous channel conditions
+- Compares optimal selection with random selection
+- Shows relay selection statistics
+
+### 4. Power Allocation Optimization (`optimize_power_allocation.m`)
+- Finds optimal power split between information and jamming
+- Demonstrates sensitivity of performance to power allocation
+- Helps determine best operating parameters
+
+### 5. Utility Functions
 - `calculate_secrecy_rate.m`: Computes secrecy rate from channel gains
 - `generate_rayleigh_channel.m`: Generates Rayleigh fading channel coefficients
 - `calculate_path_loss.m`: Calculates path loss based on distance
+- `SimulationConfig.m`: Configuration class for easy parameter management
 
 ## Requirements
 
@@ -39,6 +51,28 @@ The system consists of:
 - No additional toolboxes required (uses base MATLAB functions)
 
 ## Usage
+
+### Quick Start
+
+For a quick introduction to the system, run:
+
+```matlab
+% Run the quick start example
+example_quick_start
+```
+
+This provides a simple demonstration with detailed explanations of each step.
+
+### Running All Tests
+
+To verify all simulations work correctly:
+
+```matlab
+% Run complete test suite
+run_all_tests
+```
+
+This will execute all simulations sequentially and generate all output figures.
 
 ### Running the Basic Relay Simulation
 
@@ -65,6 +99,32 @@ This will:
 2. Compare with non-jamming approach
 3. Generate plot of secrecy capacity vs SNR
 4. Save results as `cooperative_jamming_results.png`
+
+### Running Multi-Relay Selection
+
+```matlab
+% Run relay selection simulation
+relay_selection_simulation
+```
+
+This will:
+1. Simulate a system with multiple available relays
+2. Compare optimal vs random relay selection
+3. Show which relays are selected most frequently
+4. Save results as `relay_selection_results.png`
+
+### Optimizing Power Allocation
+
+```matlab
+% Run power allocation optimization
+optimize_power_allocation
+```
+
+This will:
+1. Test different power split values
+2. Find optimal allocation between information and jamming
+3. Analyze sensitivity to SNR
+4. Save results as `power_allocation_optimization.png`
 
 ## Key Parameters
 
@@ -107,6 +167,22 @@ Typical observations:
 - Cooperative jamming can further enhance security by degrading eavesdropper's channel
 - Performance improves with increasing SNR
 - Optimal power allocation depends on channel conditions and node positions
+
+## Available Scripts
+
+### Simulation Scripts
+1. **`example_quick_start.m`** - Simple introduction with single channel realization
+2. **`relay_security_simulation.m`** - Main relay security simulation
+3. **`cooperative_jamming_simulation.m`** - Cooperative jamming implementation
+4. **`relay_selection_simulation.m`** - Multi-relay selection strategies
+5. **`optimize_power_allocation.m`** - Power allocation optimization
+6. **`run_all_tests.m`** - Complete test suite for all simulations
+
+### Utility Functions
+- **`calculate_secrecy_rate.m`** - Calculate secrecy rate from SNR and channel gains
+- **`generate_rayleigh_channel.m`** - Generate Rayleigh fading coefficients
+- **`calculate_path_loss.m`** - Calculate path loss from distance
+- **`SimulationConfig.m`** - Configuration management class
 
 ## Theory Background
 
