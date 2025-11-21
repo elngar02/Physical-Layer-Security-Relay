@@ -1,0 +1,798 @@
+Some Steps to do so 
+
+1. What exactly are you trying to reproduce?
+
+From the paper, the “deliverables” you should aim to match are:
+
+Figures
+
+Fig. 1–2: RSSI vs distance (simulation vs real-world data). 
+
+Physical Layer Plausibility Che…
+
+Fig. 3–7: RSSI vs distance, normal vs each attack type (Types 1, 2, 4, 8, 16). 
+
+Physical Layer Plausibility Che…
+
+Fig. 8–9: Block diagram + thresholds illustration. 
+
+Physical Layer Plausibility Che…
+
+Fig. 10: Precision–recall curves of WBSM by varying α. 
+
+Physical Layer Plausibility Che…
+
+Tables
+
+Table 1: Definitions of the 5 attack types (Constant, Constant Offset, Random, Random Offset, Eventual Stop). 
+
+Physical Layer Plausibility Che…
+
+Table 2: BSM-level detection using 95% vs 99.7% confidence intervals. 
+
+Physical Layer Plausibility Che…
+
+Table 3: Vehicle-level detection (CCR, precision, recall) per attack type for KNN, SVM, FBSM, MBSM, WBSM. 
+
+Physical Layer Plausibility Che…
+
+Table 4: Overall detection over all 5 attacks. 
+
+Physical Layer Plausibility Che…
+
+If you can reconstruct those, you’ve essentially replicated the work.
+
+2. Data you need (and where to get it)
+2.1 Core data sets
+
+Original VeReMi data set (Vehicular Reference Misbehaviour Dataset)
+– GitHub organisation: VeReMi-dataset
+GitHub
++1
+
+– Contains:
+
+Logs per vehicle, with:
+
+vehicle’s own GPS trajectory (type=2)
+
+received BSMs (type=3) including RSSI, claimed sender, claimed position, etc.
+
+Ground truth file indicating which vehicles are attackers and their attack type.
+
+Modified VeReMi data set (the one this paper actually uses)
+– GitHub: WiSec_DataModifiedVeremi_Dataset
+GitHub
+
+– This is crucial because the paper modifies VeReMi to add receiver positions at reception time and converts JSON → CSV to make physical-layer analysis possible. 
+
+Physical Layer Plausibility Che…
+
+You can replicate almost all the paper using only the Modified VeReMi data set + MATLAB; you do not strictly need to re-run VEINS unless you want to regenerate data.
+
+2.2 “Real” RSSI traces (for Fig. 2)
+
+For qualitative validation they used an iTETRIS V2I RSSI data set from Gozálvez et al., IEEE Communications Magazine 2012. 
+
+Physical Layer Plausibility Che…
+
+For a practical replication you have three options:
+
+If you can get that data set, do the same plots.
+
+If not, you can:
+
+Use any realistic V2X RSSI traces you can access; or
+
+Skip this step and focus on the VeReMi-based results (most later papers that cite this one focus on V2X misbehaviour detection and use VeReMi only). 
+orbilu.uni.lu
++1
+
+3. Understanding the attack model
+
+Attack types (Table 1) in VeReMi: 
+
+Physical Layer Plausibility Che…
+
+Type 1 – Constant Position: attacker broadcasts a fixed (x,y) while actually moving.
+
+Type 2 – Constant Offset: attacker broadcasts position = real_pos + fixed offset (Δx, Δy).
+
+Type 4 – Random Position: attacker broadcasts a uniformly random position in the full map.
+
+Type 8 – Random Offset: attacker broadcasts real_pos + random offset in a bounding box around the true position.
+
+Type 16 – Eventual Stop: behaves normally first, then repeatedly sends the same position (“freezes”).
+
+All your labels come from the ground truth file in VeReMi / Modified VeReMi (there’s a field that encodes attacker type; 0 or missing means normal).
+
+4. Pre-processing: building the RSSI–distance model
+
+This is the heart of the method and the bit you really must get right.
+
+4.1 What a single BSM record needs to contain
+
+From the Modified VeReMi CSV you should have, per BSM (or be able to derive):
+
+sender_id
+
+receiver_id
+
+attack_type (0 = normal, otherwise 1/2/4/8/16)
+
+claimed_x, claimed_y of sender (from BSM payload)
+
+true_x_sender, true_y_sender (from ground truth)
+
+true_x_receiver, true_y_receiver (from ground truth; added in Modified VeReMi) 
+
+Physical Layer Plausibility Che…
+
+rssi (in dB)
+
+time or sequence index (for ordering BSMs within each sender–receiver pair)
+
+Check the repository’s README to see the exact column names and adapt accordingly. 
+GitHub
+
+4.2 Distance definitions
+
+For normal behaviour, the distance is the true distance between sender and receiver:
+
+𝑑
+real
+=
+(
+𝑥
+𝑠
+true
+−
+𝑥
+𝑟
+true
+)
+2
++
+(
+𝑦
+𝑠
+true
+−
+𝑦
+𝑟
+true
+)
+2
+.
+d
+real
+	​
+
+=
+(x
+s
+true
+	​
+
+−x
+r
+true
+	​
+
+)
+2
++(y
+s
+true
+	​
+
+−y
+r
+true
+	​
+
+)
+2
+	​
+
+.
+
+For BSM plausibility checking, the distance used is the distance implied by the claimed transmitting position and the receiver’s true position:
+
+𝑑
+claimed
+=
+(
+𝑥
+𝑠
+claimed
+−
+𝑥
+𝑟
+true
+)
+2
++
+(
+𝑦
+𝑠
+claimed
+−
+𝑦
+𝑟
+true
+)
+2
+.
+d
+claimed
+	​
+
+=
+(x
+s
+claimed
+	​
+
+−x
+r
+true
+	​
+
+)
+2
++(y
+s
+claimed
+	​
+
+−y
+r
+true
+	​
+
+)
+2
+	​
+
+.
+
+In normal messages, claimed ≈ true, so the two are nearly identical; for spoofing attacks they diverge.
+
+4.3 Constructing RSSI confidence intervals (per metre)
+
+The paper does this only from normal BSMs (no attackers). 
+
+Physical Layer Plausibility Che…
+
+Algorithm:
+
+Filter normal BSMs (attack_type == 0).
+
+Compute d_real for each of them.
+
+Bin by distance:
+
+Use 1 m resolution: bin index k = round(d_real) or floor(d_real) (paper says “resolution of 1 metre”; they don’t specify rounding vs flooring, but it’s not critical for replication). 
+
+Physical Layer Plausibility Che…
+
+For each bin 
+𝑘
+k:
+
+Let RSSI values in that bin be 
+𝑟
+1
+,
+…
+,
+𝑟
+𝑛
+r
+1
+	​
+
+,…,r
+n
+	​
+
+.
+
+Compute mean 
+𝜇
+𝑘
+μ
+k
+	​
+
+ and standard deviation 
+𝜎
+𝑘
+σ
+k
+	​
+
+.
+
+Build confidence intervals:
+
+95%: 
+[
+𝜇
+𝑘
+−
+2
+𝜎
+𝑘
+,
+ 
+𝜇
+𝑘
++
+2
+𝜎
+𝑘
+]
+[μ
+k
+	​
+
+−2σ
+k
+	​
+
+, μ
+k
+	​
+
++2σ
+k
+	​
+
+]
+
+99.7%: 
+[
+𝜇
+𝑘
+−
+3
+𝜎
+𝑘
+,
+ 
+𝜇
+𝑘
++
+3
+𝜎
+𝑘
+]
+[μ
+k
+	​
+
+−3σ
+k
+	​
+
+, μ
+k
+	​
+
++3σ
+k
+	​
+
+]
+
+Store these intervals as vectors indexed by k, e.g. rssi_low_997(k) and rssi_high_997(k).
+
+In MATLAB:
+
+% Assume normal_data is a table with columns: d_real, rssi
+maxD   = ceil(max(normal_data.d_real));
+mu     = nan(maxD,1);
+sigma  = nan(maxD,1);
+
+for k = 0:maxD
+    idx = floor(normal_data.d_real) == k;
+    if nnz(idx) < 5
+        continue; % not enough samples
+    end
+    r_k     = normal_data.rssi(idx);
+    mu(k+1) = mean(r_k);
+    sigma(k+1) = std(r_k);
+end
+
+CI95_low  = mu - 2*sigma;
+CI95_high = mu + 2*sigma;
+CI997_low = mu - 3*sigma;
+CI997_high= mu + 3*sigma;
+
+
+You will later use only the 99.7% intervals, because Table 2 shows that 99.7% gives much higher precision than 95% with only small loss in recall. 
+
+Physical Layer Plausibility Che…
+
+5. BSM-level anomaly test
+
+Given a BSM from sender s to receiver r:
+
+Compute d_claimed.
+
+Find bin k = floor(d_claimed) (cap to [0, maxD]).
+
+Look up CI_low(k), CI_high(k) for the chosen confidence level (99.7%).
+
+If rssi < CI_low(k) or rssi > CI_high(k), mark BSM = anomalous; otherwise BSM = normal. 
+
+Physical Layer Plausibility Che…
+
+In MATLAB:
+
+function is_anom = isBSMAnomalous(d_claimed, rssi, CI_low, CI_high)
+    k = floor(d_claimed);
+    k = max(0,min(k, numel(CI_low)-1));  % clamp
+    k_idx = k + 1;  % MATLAB index
+    if isnan(CI_low(k_idx))
+        is_anom = false; % no model -> treat as normal or ignore
+        return;
+    end
+    is_anom = (rssi < CI_low(k_idx)) || (rssi > CI_high(k_idx));
+end
+
+6. Vehicle-level plausibility checks
+
+The three algorithms operate on sequences of BSMs from a given sender to a given receiver. 
+
+Physical Layer Plausibility Che…
+
+You should group your data by (receiver_id, sender_id) (each receiver runs its own detection).
+
+Let a_n ∈ {0,1} be the anomaly indicator for the nth BSM in that pair (1 = anomalous, 0 = normal). Equivalently, BSMscore_n = 1 - a_n.
+
+6.1 FBSM – First-BSM “safety-first” check
+
+Logic: if any BSM is anomalous → classify sender as attacker.
+
+function is_attacker = FBSM(a_vec)
+    % a_vec is logical array of anomalous flags per BSM
+    is_attacker = any(a_vec);
+end
+
+
+This yields high recall but more false positives (it is very sensitive). 
+
+Physical Layer Plausibility Che…
+
+6.2 MBSM – Majority-BSM check
+
+Logic: if more than half of BSMs are anomalous → attacker.
+
+function is_attacker = MBSM(a_vec)
+    if isempty(a_vec)
+        is_attacker = false;
+        return;
+    end
+    frac_anom  = mean(a_vec);  % fraction of anomalous BSMs
+    is_attacker = frac_anom > 0.5;
+end
+
+
+This gives very high precision but poor recall for attacks that misbehave only occasionally or late (e.g. Eventual Stop, random offsets). 
+
+Physical Layer Plausibility Che…
+
+6.3 WBSM – Weighted-BSM check (weighted moving average)
+
+This is the more refined detector.
+
+Maintain a plausibility score 
+𝑆
+𝑛
+S
+n
+	​
+
+ per sender–receiver pair.
+
+Initial score: 
+𝑆
+0
+=
+1
+S
+0
+	​
+
+=1 (fully trusted).
+
+At BSM n, compute:
+
+𝑆
+𝑛
+=
+(
+1
+−
+𝛼
+)
+𝑆
+𝑛
+−
+1
++
+𝛼
+⋅
+BSMscore
+𝑛
+,
+S
+n
+	​
+
+=(1−α)S
+n−1
+	​
+
++α⋅BSMscore
+n
+	​
+
+,
+
+where BSMscore = 1 if BSM is normal, 0 if anomalous. 
+
+Physical Layer Plausibility Che…
+
+A global threshold 
+𝑇
+T is set such that 99.7% of normal vehicles have final score above T. Any vehicle with final score < T is classified as attacker.
+
+MATLAB implementation for one sequence:
+
+function S = compute_WBSM_scores(a_vec, alpha)
+    % a_vec: logical (1 = anomalous); we convert to BSM scores
+    bsm_score = 1 - double(a_vec); % 1 normal, 0 anomalous
+    N = numel(bsm_score);
+    S = zeros(N,1);
+    S_prev = 1; % start fully trusted
+    for n = 1:N
+        S_curr = (1-alpha)*S_prev + alpha*bsm_score(n);
+        S(n) = S_curr;
+        S_prev = S_curr;
+    end
+end
+
+
+To determine classification, you need one final score per vehicle, per receiver. A simple choice is S_final = S(end) for that (receiver, sender) pair.
+
+7. How to set α and the WBSM threshold
+
+In the paper they sweep α ∈ {0.05, 0.10, …, 0.95} and choose the value that maximises the correct-classification rate (CCR).
+
+7.1 Choosing the threshold T for WBSM
+
+For a given α:
+
+Run the WBSM score update on normal vehicles only.
+
+For each (receiver, sender) pair that is truly normal (attack_type 0), compute its final score S_final.
+
+Build the empirical distribution of S_final over normal vehicles.
+
+Set threshold T as the 0.3rd percentile (lower 0.3%) – that gives a 99.7% one-sided confidence level (only 0.3% of normal vehicles fall below).
+
+In MATLAB: T = quantile(S_final_normals, 0.003);
+
+Then, when you evaluate on both attackers and normals, classify:
+
+is_attacker_WBSM = (S_final < T);
+
+7.2 Choosing α
+
+For each α in the grid:
+
+For each vehicle pair, compute S_final.
+
+With threshold T (from normal vehicles only), label each vehicle as attacker/normal.
+
+Compute CCR, precision, recall (see next section).
+
+Pick α giving the highest CCR; record its precision and recall. This is what they report in Table 3 and Table 4.
+
+Fig. 10 in the paper is simply precision–recall points as you vary α. 
+
+Physical Layer Plausibility Che…
+
+8. Computing metrics (CCR, precision, recall)
+
+Definitions (vehicle-level): 
+
+Physical Layer Plausibility Che…
+
+True Positive (TP): attacker correctly detected as attacker.
+
+False Positive (FP): normal vehicle incorrectly flagged as attacker.
+
+False Negative (FN): attacker not detected.
+
+True Negative (TN): normal correctly treated as normal.
+
+Then:
+
+CCR = (TP + TN) / (TP + TN + FP + FN)
+
+Precision = TP / (TP + FP)
+
+Recall = TP / (TP + FN)
+
+In MATLAB:
+
+function [CCR, prec, rec] = metrics(y_true, y_pred)
+    % y_true: logical (1 attacker, 0 normal)
+    % y_pred: logical (1 predicted attacker)
+    TP = nnz( y_true &  y_pred);
+    FP = nnz(~y_true &  y_pred);
+    FN = nnz( y_true & ~y_pred);
+    TN = nnz(~y_true & ~y_pred);
+    
+    CCR  = (TP + TN) / (TP + TN + FP + FN);
+    prec = TP / max(1, (TP + FP));
+    rec  = TP / max(1, (TP + FN));
+end
+
+
+To match per-attack tables (Table 3), you filter data for a given attack type and treat all vehicles with that attack type as attackers, the rest as normal. To get the overall table (Table 4), you merge all five attack types and evaluate once.
+
+9. Experimental design: how to select your samples
+
+From Section 5 of the paper: 
+
+Physical Layer Plausibility Che…
+
+For each attack type they collect over 4×10⁵ BSMs over 360 seconds of simulation.
+
+VeReMi provides 3 vehicle densities (low, medium, high) and 3 attacker densities (10%, 20%, 30%), each with 5 random seeds.
+
+A reasonable replication strategy:
+
+Use the same settings as the paper for plots:
+
+For Fig. 1: high traffic density, 30% attackers.
+
+For detection metrics:
+
+For each attack type, take all runs for that attack across all densities and attacker ratios, or mimic their subset (the paper does not fully specify, but they do mention 4×10⁵ BSMs per attack type, so check how many your selection yields and adjust).
+
+Use all legitimate vehicles as normal class, not just ones in scenarios with attackers.
+
+If you want to get closer to the exact sample counts, you can read the Modified VeReMi CSVs and tally:
+
+Number of BSMs per attack type.
+
+Number of distinct sender IDs per attack type and in normal set.
+
+10. Re-implementing KNN / SVM baselines (optional but nice)
+
+The paper compares against application-layer ML from an earlier work that uses plausibility checks as features and then applies KNN and SVM.
+
+If you want full replication:
+
+Read the ICMLA 2018 paper “Integrating Plausibility Checks and Machine Learning for Misbehavior Detection in VANET” for the exact features used. 
+ResearchGate
+
+Implement those features in MATLAB:
+
+e.g. relative speed, acceleration consistency, heading, etc. across consecutive BSMs.
+
+Use MATLAB’s fitcknn, fitcsvm with train/test splits similar to the paper (or cross-validation).
+
+Evaluate CCR, precision, recall per attack type and overall.
+
+Alternatively, you can look at existing public implementations on VeReMi (Python/Scikit-learn) and translate the feature engineering to MATLAB. For example, the Veremi-dataset-classification repository implements ML-based misbehaviour detection on VeReMi. 
+GitHub
++1
+
+11. Sanity checks: what your intermediate results should look like
+
+As you go, check:
+
+RSSI–distance shape:
+
+Fig. 1 & Fig. 2: simulation and real data both show RSSI decreasing roughly monotonically with distance, with substantial spread. 
+
+Physical Layer Plausibility Che…
+
+Normal vs attack plots (Fig. 3–7):
+
+Type 1 & 16 (Constant position & Eventual stop) should show “spikes” of red attacker points extending far beyond normal communication range. 
+
+Physical Layer Plausibility Che…
+
+Type 2 (Constant offset) should look like a shifted copy of normal.
+
+Type 4 (Random position) looks almost uniformly random in distance.
+
+Type 8 (Random offset) looks closest to normal but with a broader spread.
+
+Table 2:
+
+With 99.7% CI you should see much higher precision than with 95% at BSM level; recall only slightly lower. 
+
+Physical Layer Plausibility Che…
+
+Tables 3 & 4 (ballpark):
+
+Overall WBSM recall ≈ 0.84 and precision ≈ 0.96; CCR ≈ 0.94. 
+
+Physical Layer Plausibility Che…
+
+FBSM slightly higher recall but slightly lower precision than WBSM.
+
+MBSM very high precision (~1.0) but recall similar to KNN/SVM (≈0.63).
+
+Exact numbers may differ a bit depending on random splits, distance binning choices, and how you treat bins with few samples, but trends should match.
+
+12. How others extended this work (ideas for improvements)
+
+Since you asked for different approaches / better solutions:
+
+Machine-learning improvements on VeReMi
+Several papers propose enhanced ML or deep learning methods for position falsification attacks, often using VeReMi or its extensions:
+orbilu.uni.lu
++3
+SciSpace
++3
+Queens Real Estate
++3
+
+Use consecutive BSMs (temporal features) rather than single BSMs.
+
+Use more advanced models (Random Forest, Gradient Boosting, LSTM, CNN).
+
+VeReMi Extensions
+There is an extended VeReMi data set with more attack types (speed falsification, DoS, replay, sybil, etc.). 
+orbilu.uni.lu
++1
+
+Cross-validation strategies
+Some work proposes spatial/temporal cross-validation to avoid over-optimistic results when training and testing on very similar scenarios. There is even a public repo with such experiments that references this physical-layer paper. 
+GitHub
++1
+
+A practical path for you:
+
+Step 1: Replicate the paper exactly on Modified VeReMi using MATLAB.
+
+Step 2: Add ML-based detectors (e.g. Random Forest, SVM) in MATLAB on top of the same data, and benchmark against FBSM/MBSM/WBSM.
+
+Step 3: Extend to VeReMi Extension with extra attacks, to show your method’s robustness.
+
+13. Suggested MATLAB project structure
+
+To make this concrete, here is a clean structure you can follow:
+
+load_veremi_data.m
+– loads CSV files from the Modified VeReMi repo, normalises column names, merges into one big table.
+
+build_rssi_model.m
+– filters normal BSMs, computes d_real, builds 99.7% confidence intervals (and 95% if you want Table 2).
+
+bsm_anomaly_flags.m
+– given the full data and CI model, computes d_claimed and a logical anomaly flag per BSM.
+
+run_FBSM_MBSM_WBSM.m
+– groups data by (receiver_id, sender_id), runs the three checks, returns is_attacker_* per vehicle.
+
+evaluate_attack_type.m
+– for a given attack type, extracts the relevant vehicles and computes CCR/precision/recall.
+
+plot_rssi_vs_distance.m
+– reproduces Figs 1–7.
+
+sweep_alpha_WBSM.m
+– computes precision–recall points for WBSM vs α and plots them (Fig. 10).
+
